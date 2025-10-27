@@ -1,0 +1,76 @@
+# Terraform files
+**/.terraform/
+**/.terraform.lock.hcl
+**/terraform.tfstate
+**/terraform.tfstate.*
+**/terraform.tfstate.backup
+**/.terraformrc
+**/terraform.rc
+**/tfplan
+**/tfplan.*
+**/*.tfvars
+**/*.tfvars.json
+**/crash.log
+**/crash.*.log
+**/override.tf
+**/override.tf.json
+**/*_override.tf
+**/*_override.tf.json
+
+# Terraform output files
+**/*-outputs.txt
+**/baseline-outputs.txt
+**/config1-outputs.txt
+**/config2-outputs.txt
+**/config3-outputs.txt
+
+# Test results and data collection
+**/AttackResults/
+**/PerformanceResults/
+**/ResearchData/
+**/*.json
+**/azure-monitor-query-*.kql
+**/*-results.json
+**/*-metrics.json
+
+# Azure CLI
+**/.azure/
+
+# Logs
+**/*.log
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.vs/
+
+# Temporary files
+**/tmp/
+**/temp/
+**/.tmp/
+
+# Backup files
+**/*.bak
+**/*.backup
+
+# SSH keys (if any accidentally added)
+**/*.pem
+**/*.key
+**/id_rsa*
+
+# Environment variables (if any)
+**/.env
+**/.env.local
+
+# Documentation build artifacts (if any)
+**/node_modules/
+**/build/
+**/dist/
