@@ -96,27 +96,72 @@ Write-Host ""
 
 # AD enumeration
 Write-Host "  [1.3] Active Directory enumeration..." -ForegroundColor Yellow
-try {
-    $domain = Get-ADDomain -ErrorAction Stop
-    $users = Get-ADUser -Filter * -ErrorAction Stop | Measure-Object
-    $computers = Get-ADComputer -Filter * -ErrorAction Stop | Measure-Object
-    
-    $reconResults.ADEnumeration = @{
-        DomainName = $domain.Name
-        UserCount = $users.Count
-        ComputerCount = $computers.Count
-        Success = $true
+
+# Check if AD module is available
+$adModuleAvailable = Get-Module -ListAvailable -Name ActiveDirectory
+
+if (-not $adModuleAvailable) {
+    Write-Host "    AD module not found. Attempting to install..." -ForegroundColor Yellow
+
+    try {
+        # Install RSAT AD PowerShell module
+        Install-WindowsFeature -Name RSAT-AD-PowerShell -ErrorAction Stop | Out-Null
+        Write-Host "    AD module installed successfully" -ForegroundColor Green
+
+        # Refresh module availability
+        $adModuleAvailable = Get-Module -ListAvailable -Name ActiveDirectory
+    } catch {
+        Write-Host "    Failed to install AD module: $($_.Exception.Message)" -ForegroundColor Yellow
     }
-    
-    Write-Host "    Domain: $($domain.Name)" -ForegroundColor Green
-    Write-Host "    Users: $($users.Count)" -ForegroundColor Green
-    Write-Host "    Computers: $($computers.Count)" -ForegroundColor Green
-} catch {
+}
+
+if ($adModuleAvailable) {
+    try {
+        Import-Module ActiveDirectory -ErrorAction Stop
+
+        # Check if we're in a domain environment
+        $computerSystem = Get-WmiObject -Class Win32_ComputerSystem
+
+        if ($computerSystem.PartOfDomain) {
+            # We're domain-joined, perform real AD enumeration
+            $domain = Get-ADDomain -ErrorAction Stop
+            $users = Get-ADUser -Filter * -ErrorAction Stop | Measure-Object
+            $computers = Get-ADComputer -Filter * -ErrorAction Stop | Measure-Object
+
+            $reconResults.ADEnumeration = @{
+                DomainName = $domain.Name
+                UserCount = $users.Count
+                ComputerCount = $computers.Count
+                Success = $true
+            }
+
+            Write-Host "    Domain: $($domain.Name)" -ForegroundColor Green
+            Write-Host "    Users: $($users.Count)" -ForegroundColor Green
+            Write-Host "    Computers: $($computers.Count)" -ForegroundColor Green
+        } else {
+            # Module installed but not domain-joined
+            $reconResults.ADEnumeration = @{
+                Method = "Simulated-NoAD"
+                Success = $false
+                Note = "AD module available but not domain-joined"
+            }
+            Write-Host "    AD module available but VM is not domain-joined" -ForegroundColor Gray
+        }
+    } catch {
+        $reconResults.ADEnumeration = @{
+            Success = $false
+            Error = $_.Exception.Message
+        }
+        Write-Host "    AD enumeration failed: $($_.Exception.Message)" -ForegroundColor Red
+    }
+} else {
+    # Could not install AD module
     $reconResults.ADEnumeration = @{
+        Method = "Simulated-NoAD"
         Success = $false
-        Error = $_.Exception.Message
+        Note = "Could not install AD module"
     }
-    Write-Host "    AD enumeration failed: $($_.Exception.Message)" -ForegroundColor Red
+    Write-Host "    Unable to install AD module - simulating standalone environment" -ForegroundColor Gray
 }
 
 $results.AttackPhases.Reconnaissance = $reconResults
