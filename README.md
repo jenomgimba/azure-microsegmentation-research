@@ -339,6 +339,37 @@ terraform destroy -auto-approve
 - Authentication overhead (WinRM session establishment)
 - Resource utilization (CPU, memory)
 
+## Data Analysis
+
+After collecting test results, generate charts and tables for dissertation:
+
+### Setup
+```bash
+# Copy JSON files from VM to local project directory
+# Create folders: ./AttackResults, ./PerformanceResults, ./ResearchData
+# Copy all JSON result files into these folders
+
+# Install Python dependencies
+pip install -r requirements.txt
+```
+
+### Generate Charts
+```bash
+# Run analysis script
+python analyze-results.py
+```
+
+Generates 7 publication-ready charts (300 DPI PNG) in `./analysis-output/`:
+- Lateral movement success rates
+- Attack method breakdown (RDP vs SMB)
+- Network latency comparison
+- Network throughput
+- Resource utilization
+- Attack success heatmap
+- Summary table (also exports CSV)
+
+Script searches for JSON files in project directory first (`./AttackResults`, `./PerformanceResults`, `./ResearchData`), then falls back to `C:\` paths if running on VM.
+
 ## Cost Breakdown
 
 | Resource Type | Quantity | Daily Cost | Notes |
