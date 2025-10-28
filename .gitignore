@@ -32,6 +32,7 @@
 **/azure-monitor-query-*.kql
 **/*-results.json
 **/*-metrics.json
+**/analysis-output/
 
 # Azure CLI
 **/.azure/
