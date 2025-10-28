@@ -214,6 +214,52 @@ resource "azurerm_virtual_machine_extension" "monitor_db" {
   auto_upgrade_minor_version = true
 }
 
+# VM Configuration Extensions
+resource "azurerm_virtual_machine_extension" "config_web" {
+  count                = 1
+  name                 = "VMConfiguration"
+  virtual_machine_id   = azurerm_windows_virtual_machine.web[count.index].id
+  publisher            = "Microsoft.Compute"
+  type                 = "CustomScriptExtension"
+  type_handler_version = "1.10"
+
+  settings = jsonencode({
+    commandToExecute = "powershell -ExecutionPolicy Unrestricted -Command \"Enable-PSRemoting -Force; Set-Item WSMan:\\localhost\\Client\\TrustedHosts -Value '*' -Force; Set-ExecutionPolicy RemoteSigned -Force; Enable-NetFirewallRule -DisplayName 'File and Printer Sharing (Echo Request - ICMPv4-In)' -ErrorAction SilentlyContinue; New-NetFirewallRule -DisplayName 'Allow ICMPv4-In' -Protocol ICMPv4 -IcmpType 8 -Enabled True -Direction Inbound -Action Allow -ErrorAction SilentlyContinue; Enable-NetFirewallRule -DisplayGroup 'File and Printer Sharing' -ErrorAction SilentlyContinue; Enable-NetFirewallRule -DisplayGroup 'Windows Remote Management' -ErrorAction SilentlyContinue; Restart-Service WinRM\""
+  })
+
+  depends_on = [azurerm_virtual_machine_extension.monitor_web]
+}
+
+resource "azurerm_virtual_machine_extension" "config_app" {
+  count                = 1
+  name                 = "VMConfiguration"
+  virtual_machine_id   = azurerm_windows_virtual_machine.app[count.index].id
+  publisher            = "Microsoft.Compute"
+  type                 = "CustomScriptExtension"
+  type_handler_version = "1.10"
+
+  settings = jsonencode({
+    commandToExecute = "powershell -ExecutionPolicy Unrestricted -Command \"Enable-PSRemoting -Force; Set-Item WSMan:\\localhost\\Client\\TrustedHosts -Value '*' -Force; Set-ExecutionPolicy RemoteSigned -Force; Enable-NetFirewallRule -DisplayName 'File and Printer Sharing (Echo Request - ICMPv4-In)' -ErrorAction SilentlyContinue; New-NetFirewallRule -DisplayName 'Allow ICMPv4-In' -Protocol ICMPv4 -IcmpType 8 -Enabled True -Direction Inbound -Action Allow -ErrorAction SilentlyContinue; Enable-NetFirewallRule -DisplayGroup 'File and Printer Sharing' -ErrorAction SilentlyContinue; Enable-NetFirewallRule -DisplayGroup 'Windows Remote Management' -ErrorAction SilentlyContinue; Restart-Service WinRM\""
+  })
+
+  depends_on = [azurerm_virtual_machine_extension.monitor_app]
+}
+
+resource "azurerm_virtual_machine_extension" "config_db" {
+  count                = 1
+  name                 = "VMConfiguration"
+  virtual_machine_id   = azurerm_windows_virtual_machine.db[count.index].id
+  publisher            = "Microsoft.Compute"
+  type                 = "CustomScriptExtension"
+  type_handler_version = "1.10"
+
+  settings = jsonencode({
+    commandToExecute = "powershell -ExecutionPolicy Unrestricted -Command \"Enable-PSRemoting -Force; Set-Item WSMan:\\localhost\\Client\\TrustedHosts -Value '*' -Force; Set-ExecutionPolicy RemoteSigned -Force; Enable-NetFirewallRule -DisplayName 'File and Printer Sharing (Echo Request - ICMPv4-In)' -ErrorAction SilentlyContinue; New-NetFirewallRule -DisplayName 'Allow ICMPv4-In' -Protocol ICMPv4 -IcmpType 8 -Enabled True -Direction Inbound -Action Allow -ErrorAction SilentlyContinue; Enable-NetFirewallRule -DisplayGroup 'File and Printer Sharing' -ErrorAction SilentlyContinue; Enable-NetFirewallRule -DisplayGroup 'Windows Remote Management' -ErrorAction SilentlyContinue; Restart-Service WinRM\""
+  })
+
+  depends_on = [azurerm_virtual_machine_extension.monitor_db]
+}
+
 # Outputs
 output "web_vm_ids" {
   value = azurerm_windows_virtual_machine.web[*].id
