@@ -1,0 +1,5 @@
+Configuration,Latency_ms,Latency_Overhead_%,Throughput_Mbps,Throughput_Overhead_%,CPU_%,CPU_Overhead_%,Memory_%,Memory_Overhead_%
+Baseline,0.28,+0.00%,1074.02,+0.00%,6.6,+0.0%,31.5,+0.0%
+Config 1 (NSG),0.23,-18.67%,754.65,+29.74%,0.3,-95.0%,31.5,+0.0%
+Config 2 (ASG),0.03,-87.95%,1117.29,-4.03%,0.3,-95.7%,31.3,-0.4%
+Config 3 (Firewall),N/A,N/A,N/A,N/A,1.3,-80.4%,31.0,-1.4%

@@ -1,0 +1,4 @@
+Comparison,n,Success_Rate_d,Success_Rate_Power,Latency_d,Latency_Power
+Baseline vs config1,6,2.161,0.920,1.072,0.389
+Baseline vs config2,6,1.549,0.677,5.640,N/A
+Baseline vs config3,6,3.032,0.997,8.310,1.000

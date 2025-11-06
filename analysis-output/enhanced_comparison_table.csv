@@ -1,0 +1,5 @@
+Configuration,n,Success_Rate,Δ_Success_vs_Baseline,Δ_Success_Pct,Cohens_d,Effect_Size,Latency_ms,Δ_Latency_ms,Δ_Latency_Pct,CPU_%,Memory_%,Δ_CPU,Statistical_Power
+baseline,6,88.9±2.3%,+0.0%,+0.0%,0.000,Baseline,0.28±0.05,+0.00,+0.0%,6.6,31.5,+0.0,1.000
+config1,6,61.1±9.8%,-27.8%,-31.3%,2.161,Large,0.23±0.05,-0.05,-18.7%,0.3,31.5,-6.2,0.920
+config2,6,72.2±8.1%,-16.7%,-18.7%,1.549,Large,0.03±0.04,-0.24,-88.0%,0.3,31.3,-6.3,0.677
+config3,6,44.4±11.3%,-44.4%,-50.0%,3.032,Large,0.00±0.00,-0.28,-100.0%,1.3,31.0,-5.3,0.997
