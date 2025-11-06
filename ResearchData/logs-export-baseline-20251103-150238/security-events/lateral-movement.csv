@@ -1,0 +1,4 @@
+﻿"TimeGenerated","Computer","EventID","Account","TargetUserName","IpAddress","ShareName","RelativeTargetName","ProcessName"
+"2025-11-02T19:24:31.1254173Z","vm-web-1","4648","WORKGROUP\vm-web-1$","azureadmin","89.100.159.179","","","C:\Windows\System32\svchost.exe"
+"2025-11-02T19:24:30.5204221Z","vm-web-1","4648","WORKGROUP\vm-web-1$","DWM-2","-","","","C:\Windows\System32\winlogon.exe"
+"2025-11-02T19:24:30.4856514Z","vm-web-1","4648","WORKGROUP\vm-web-1$","UMFD-2","-","","","C:\Windows\System32\winlogon.exe"

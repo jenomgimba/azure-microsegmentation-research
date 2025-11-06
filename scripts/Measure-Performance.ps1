@@ -1,28 +1,35 @@
-# Performance Measurement Script
-# Part of my MSc research project evaluating Azure micro-segmentation
-# Tests latency, throughput, and authentication overhead across configurations
+# Performance Measurement Script - Tests latency, throughput, and CPU usage
 
 param(
     [Parameter(Mandatory=$true)]
     [string]$ConfigName,
-    
+
     [Parameter(Mandatory=$false)]
-    [string]$OutputPath = "C:\PerformanceResults"
+    [string]$OutputPath = "C:\PerformanceResults",
+
+    [Parameter(Mandatory=$false)]
+    [switch]$BaselineOnly = $false
 )
 
 New-Item -ItemType Directory -Force -Path $OutputPath | Out-Null
 
 $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
-$resultsFile = Join-Path $OutputPath "performance-$ConfigName-$timestamp.json"
+$testType = if ($BaselineOnly) { "baseline" } else { "full" }
+$resultsFile = Join-Path $OutputPath "performance-$ConfigName-$testType-$timestamp.json"
 
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host "Performance Testing - $ConfigName"
+if ($BaselineOnly) {
+    Write-Host "Mode: BASELINE ONLY (no attacks)" -ForegroundColor Yellow
+}
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host ""
 
 $results = @{
     Configuration = $ConfigName
     Timestamp = $timestamp
+    TestType = $testType
+    BaselineOnly = $BaselineOnly
     Tests = @{}
 }
 
@@ -226,11 +233,67 @@ Write-Host "  CPU Usage: $avgCPU%" -ForegroundColor Green
 Write-Host "  Memory Usage: $memUsedPercent%" -ForegroundColor Green
 Write-Host ""
 
+# ============================================
+# Test 5: Application-Layer Performance (Database Query Simulation)
+# ============================================
+Write-Host "[Test 5] Application-Layer Performance (DB Query Simulation)" -ForegroundColor Yellow
+
+$appLayerResults = @()
+
+foreach ($target in $targets) {
+    Write-Host "  Testing application performance to $($target.Name)..." -ForegroundColor Gray
+
+    try {
+        # Simulate database query workload via PowerShell remoting
+        $queryTimes = @()
+
+        for ($i = 1; $i -le 10; $i++) {
+            $queryTime = Measure-Command {
+                Invoke-Command -ComputerName $target.Name -ScriptBlock {
+                    # Simulate database query workload (CPU + memory operations)
+                    1..1000 | ForEach-Object { Get-Process | Select-Object -First 10 } | Out-Null
+                } -ErrorAction Stop
+            }
+
+            $queryTimes += $queryTime.TotalMilliseconds
+            Start-Sleep -Milliseconds 100
+        }
+
+        $appData = @{
+            Target = $target.Name
+            TargetType = $target.Type
+            SampleCount = $queryTimes.Count
+            MinQueryTime = [math]::Round(($queryTimes | Measure-Object -Minimum).Minimum, 2)
+            MaxQueryTime = [math]::Round(($queryTimes | Measure-Object -Maximum).Maximum, 2)
+            AvgQueryTime = [math]::Round(($queryTimes | Measure-Object -Average).Average, 2)
+            MedianQueryTime = [math]::Round(($queryTimes | Sort-Object)[[math]::Floor($queryTimes.Count / 2)], 2)
+            Success = $true
+        }
+
+        Write-Host "    Avg query time: $($appData.AvgQueryTime)ms" -ForegroundColor Green
+
+    } catch {
+        $appData = @{
+            Target = $target.Name
+            TargetType = $target.Type
+            Success = $false
+            Error = $_.Exception.Message
+        }
+        Write-Host "    Query test failed: $($_.Exception.Message)" -ForegroundColor Red
+    }
+
+    $appLayerResults += $appData
+}
+
+$results.Tests.ApplicationLayer = $appLayerResults
+Write-Host ""
+
 # Save results
 $results | ConvertTo-Json -Depth 10 | Out-File -FilePath $resultsFile -Encoding UTF8
 
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host "Performance testing complete"
+Write-Host "Test type: $testType"
 Write-Host "Results saved to: $resultsFile"
 Write-Host "========================================" -ForegroundColor Cyan
 

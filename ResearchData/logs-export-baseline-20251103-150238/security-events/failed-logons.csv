@@ -1,0 +1,4 @@
+﻿"TimeGenerated","Computer","Account","IpAddress","LogonType","Status","SubStatus","FailureReason"
+"2025-11-03T14:31:22.2632115Z","vm-app-1","-\administrator","45.136.68.42","3","0xc000006d","0xc0000064","%%2313"
+"2025-11-03T13:51:53.1950882Z","vm-web-1","-\administrator","45.136.68.42","3","0xc000006d","0xc0000064","%%2313"
+"2025-11-02T19:23:49.894202Z","vm-web-1","MicrosoftAccount\azurerm","89.100.159.179","3","0xc000006d","0xc0000064","%%2313"

@@ -1,13 +1,10 @@
-# Baseline Configuration - Traditional Perimeter Security
-# Part of my MSc research evaluating Azure micro-segmentation
-# This configuration represents traditional security with a single flat network
-# Used as the reference baseline for comparison with segmented configurations
+# Baseline Configuration - Single flat network with traditional perimeter security
 
 terraform {
   required_providers {
     azurerm = {
       source  = "hashicorp/azurerm"
-      version = "~> 3.0"
+      version = "~> 4.0"
     }
   }
 }
@@ -18,7 +15,8 @@ provider "azurerm" {
       prevent_deletion_if_contains_resources = false
     }
   }
-  skip_provider_registration = true
+  subscription_id                = "206290e4-7213-49f1-baa4-307c7658e100"
+  resource_provider_registrations = "none"
 }
 
 # Resource Group
@@ -29,11 +27,10 @@ resource "azurerm_resource_group" "baseline" {
   tags = {
     Environment = "Research"
     Configuration = "Baseline"
-    Project = "ZeroTrust-Segmentation"
   }
 }
 
-# Virtual Network - Single flat network
+# Virtual Network
 resource "azurerm_virtual_network" "baseline" {
   name                = "vnet-baseline"
   address_space       = ["10.0.0.0/16"]
@@ -46,7 +43,7 @@ resource "azurerm_virtual_network" "baseline" {
   }
 }
 
-# Single Subnet - All VMs in one subnet (flat network)
+# Main Subnet
 resource "azurerm_subnet" "main" {
   name                 = "subnet-main"
   resource_group_name  = azurerm_resource_group.baseline.name
@@ -54,21 +51,13 @@ resource "azurerm_subnet" "main" {
   address_prefixes     = ["10.0.1.0/24"]
 }
 
-# Azure Firewall Subnet (required for Azure Firewall)
-resource "azurerm_subnet" "firewall" {
-  name                 = "AzureFirewallSubnet"
-  resource_group_name  = azurerm_resource_group.baseline.name
-  virtual_network_name = azurerm_virtual_network.baseline.name
-  address_prefixes     = ["10.0.255.0/26"]
-}
-
-# Network Security Group - Permissive (allows internal traffic)
+# Network Security Group
 resource "azurerm_network_security_group" "baseline" {
   name                = "nsg-baseline-permissive"
   location            = azurerm_resource_group.baseline.location
   resource_group_name = azurerm_resource_group.baseline.name
   
-  # Allow RDP from internet (for management)
+  # Allow RDP
   security_rule {
     name                       = "Allow-RDP-Internet"
     priority                   = 100
@@ -119,67 +108,113 @@ resource "azurerm_subnet_network_security_group_association" "main" {
   network_security_group_id = azurerm_network_security_group.baseline.id
 }
 
-# Public IP for Azure Firewall
-resource "azurerm_public_ip" "firewall" {
-  name                = "pip-firewall-baseline"
-  location            = azurerm_resource_group.baseline.location
-  resource_group_name = azurerm_resource_group.baseline.name
-  allocation_method   = "Static"
-  sku                 = "Standard"
-  
-  tags = {
-    Environment = "Research"
-    Configuration = "Baseline"
-  }
-}
-
-# Azure Firewall - Basic perimeter protection
-resource "azurerm_firewall" "baseline" {
-  name                = "afw-baseline"
-  location            = azurerm_resource_group.baseline.location
-  resource_group_name = azurerm_resource_group.baseline.name
-  sku_name            = "AZFW_VNet"
-  sku_tier            = "Standard"
-  
-  ip_configuration {
-    name                 = "configuration"
-    subnet_id            = azurerm_subnet.firewall.id
-    public_ip_address_id = azurerm_public_ip.firewall.id
-  }
-  
-  tags = {
-    Environment = "Research"
-    Configuration = "Baseline"
-  }
-}
-
-# Firewall Network Rule - Allow outbound internet
-resource "azurerm_firewall_network_rule_collection" "baseline" {
-  name                = "netrc-baseline-outbound"
-  azure_firewall_name = azurerm_firewall.baseline.name
-  resource_group_name = azurerm_resource_group.baseline.name
-  priority            = 100
-  action              = "Allow"
-  
-  rule {
-    name = "Allow-Outbound-Internet"
-    source_addresses = ["10.0.0.0/16"]
-    destination_ports = ["*"]
-    destination_addresses = ["*"]
-    protocols = ["Any"]
-  }
-}
-
-# Log Analytics Workspace for monitoring
+# Log Analytics Workspace
 resource "azurerm_log_analytics_workspace" "baseline" {
   name                = "law-baseline"
   location            = azurerm_resource_group.baseline.location
   resource_group_name = azurerm_resource_group.baseline.name
   sku                 = "PerGB2018"
   retention_in_days   = 30
-  
+
   tags = {
     Environment = "Research"
+    Configuration = "Baseline"
+  }
+}
+
+# Azure Sentinel
+resource "azurerm_log_analytics_solution" "sentinel" {
+  solution_name         = "SecurityInsights"
+  location              = azurerm_resource_group.baseline.location
+  resource_group_name   = azurerm_resource_group.baseline.name
+  workspace_resource_id = azurerm_log_analytics_workspace.baseline.id
+  workspace_name        = azurerm_log_analytics_workspace.baseline.name
+
+  plan {
+    publisher = "Microsoft"
+    product   = "OMSGallery/SecurityInsights"
+  }
+
+  tags = {
+    Environment = "Research"
+    Configuration = "Baseline"
+  }
+}
+
+# Storage for flow logs
+resource "azurerm_storage_account" "flowlogs" {
+  name                     = "stflowlogsbaseline"
+  resource_group_name      = azurerm_resource_group.baseline.name
+  location                 = azurerm_resource_group.baseline.location
+  account_tier             = "Standard"
+  account_replication_type = "LRS"
+
+  tags = {
+    Environment = "Research"
+    Configuration = "Baseline"
+  }
+}
+
+# VNet Flow Logs
+resource "azurerm_network_watcher_flow_log" "baseline_vnet" {
+  name                 = "flowlog-vnet-baseline"
+  network_watcher_name = "NetworkWatcher_uksouth"
+  resource_group_name  = "NetworkWatcherRG"
+
+  target_resource_id = azurerm_virtual_network.baseline.id
+  storage_account_id = azurerm_storage_account.flowlogs.id
+  enabled            = true
+  version            = 2
+
+  retention_policy {
+    enabled = true
+    days    = 7
+  }
+
+  traffic_analytics {
+    enabled               = true
+    workspace_id          = azurerm_log_analytics_workspace.baseline.workspace_id
+    workspace_region      = azurerm_log_analytics_workspace.baseline.location
+    workspace_resource_id = azurerm_log_analytics_workspace.baseline.id
+    interval_in_minutes   = 10
+  }
+
+  tags = {
+    Environment = "Research"
+    Configuration = "Baseline"
+  }
+}
+
+# Data Collection Rule for security events
+resource "azurerm_monitor_data_collection_rule" "security_events" {
+  name                = "dcr-security-events-baseline"
+  resource_group_name = azurerm_resource_group.baseline.name
+  location            = azurerm_resource_group.baseline.location
+
+  destinations {
+    log_analytics {
+      workspace_resource_id = azurerm_log_analytics_workspace.baseline.id
+      name                  = "destination-log-analytics"
+    }
+  }
+
+  data_flow {
+    streams      = ["Microsoft-SecurityEvent"]
+    destinations = ["destination-log-analytics"]
+  }
+
+  data_sources {
+    windows_event_log {
+      streams = ["Microsoft-SecurityEvent"]
+      name    = "eventLogsDataSource"
+      x_path_queries = [
+        "Security!*[System[(EventID=4624 or EventID=4625 or EventID=4648 or EventID=4672 or EventID=4720 or EventID=4732 or EventID=4776 or EventID=5140 or EventID=5145)]]"
+      ]
+    }
+  }
+
+  tags = {
+    Environment   = "Research"
     Configuration = "Baseline"
   }
 }

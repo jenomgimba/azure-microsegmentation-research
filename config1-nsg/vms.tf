@@ -1,5 +1,4 @@
-# Virtual Machines for Configuration 1 - NSG Segmentation
-# 3 VMs: 1 web, 1 app, 1 database
+# Virtual Machines - Web, Application, and Database servers
 
 variable "admin_username" {
   type    = string
@@ -258,6 +257,28 @@ resource "azurerm_virtual_machine_extension" "config_db" {
   })
 
   depends_on = [azurerm_virtual_machine_extension.monitor_db]
+}
+
+# Data Collection Rule Associations
+resource "azurerm_monitor_data_collection_rule_association" "web" {
+  count                   = 1
+  name                    = "dcra-web-${count.index + 1}"
+  target_resource_id      = azurerm_windows_virtual_machine.web[count.index].id
+  data_collection_rule_id = azurerm_monitor_data_collection_rule.security_events.id
+}
+
+resource "azurerm_monitor_data_collection_rule_association" "app" {
+  count                   = 1
+  name                    = "dcra-app-${count.index + 1}"
+  target_resource_id      = azurerm_windows_virtual_machine.app[count.index].id
+  data_collection_rule_id = azurerm_monitor_data_collection_rule.security_events.id
+}
+
+resource "azurerm_monitor_data_collection_rule_association" "db" {
+  count                   = 1
+  name                    = "dcra-db-${count.index + 1}"
+  target_resource_id      = azurerm_windows_virtual_machine.db[count.index].id
+  data_collection_rule_id = azurerm_monitor_data_collection_rule.security_events.id
 }
 
 # Outputs

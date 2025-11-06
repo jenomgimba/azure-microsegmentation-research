@@ -1,11 +1,10 @@
-# Configuration 2 - Application Security Group (ASG) Segmentation
-# Workload-level segmentation using ASGs
+# Configuration 2 - ASG-based workload segmentation
 
 terraform {
   required_providers {
     azurerm = {
       source  = "hashicorp/azurerm"
-      version = "~> 3.0"
+      version = "~> 4.0"
     }
   }
 }
@@ -16,7 +15,8 @@ provider "azurerm" {
       prevent_deletion_if_contains_resources = false
     }
   }
-  skip_provider_registration = true
+  subscription_id                = "206290e4-7213-49f1-baa4-307c7658e100"
+  resource_provider_registrations = "none"
 }
 
 # Resource Group
@@ -27,7 +27,6 @@ resource "azurerm_resource_group" "config2" {
   tags = {
     Environment = "Research"
     Configuration = "Config2-ASG"
-    Project = "ZeroTrust-Segmentation"
   }
 }
 
@@ -125,7 +124,20 @@ resource "azurerm_network_security_group" "workloads" {
     source_address_prefix                      = "*"
     destination_application_security_group_ids = [azurerm_application_security_group.web.id]
   }
-  
+
+  # Allow RDP from internet (for testing/data collection)
+  security_rule {
+    name                       = "Allow-RDP-Testing"
+    priority                   = 110
+    direction                  = "Inbound"
+    access                     = "Allow"
+    protocol                   = "Tcp"
+    source_port_range          = "*"
+    destination_port_range     = "3389"
+    source_address_prefix      = "*"
+    destination_address_prefix = "*"
+  }
+
   # Allow web to app communication
   security_rule {
     name                                       = "Allow-Web-To-App"
@@ -238,7 +250,26 @@ resource "azurerm_log_analytics_workspace" "config2" {
   resource_group_name = azurerm_resource_group.config2.name
   sku                 = "PerGB2018"
   retention_in_days   = 30
-  
+
+  tags = {
+    Environment = "Research"
+    Configuration = "Config2-ASG"
+  }
+}
+
+# Azure Sentinel
+resource "azurerm_log_analytics_solution" "sentinel" {
+  solution_name         = "SecurityInsights"
+  location              = azurerm_resource_group.config2.location
+  resource_group_name   = azurerm_resource_group.config2.name
+  workspace_resource_id = azurerm_log_analytics_workspace.config2.id
+  workspace_name        = azurerm_log_analytics_workspace.config2.name
+
+  plan {
+    publisher = "Microsoft"
+    product   = "OMSGallery/SecurityInsights"
+  }
+
   tags = {
     Environment = "Research"
     Configuration = "Config2-ASG"
@@ -252,6 +283,75 @@ resource "azurerm_storage_account" "flowlogs" {
   location                 = azurerm_resource_group.config2.location
   account_tier             = "Standard"
   account_replication_type = "LRS"
+
+  tags = {
+    Environment = "Research"
+    Configuration = "Config2-ASG"
+  }
+}
+
+# VNet Flow Logs (replacement for deprecated NSG flow logs)
+resource "azurerm_network_watcher_flow_log" "config2_vnet" {
+  name                 = "flowlog-vnet-config2"
+  network_watcher_name = "NetworkWatcher_uksouth"
+  resource_group_name  = "NetworkWatcherRG"
+
+  target_resource_id = azurerm_virtual_network.config2.id
+  storage_account_id = azurerm_storage_account.flowlogs.id
+  enabled            = true
+  version            = 2
+
+  retention_policy {
+    enabled = true
+    days    = 7
+  }
+
+  traffic_analytics {
+    enabled               = true
+    workspace_id          = azurerm_log_analytics_workspace.config2.workspace_id
+    workspace_region      = azurerm_log_analytics_workspace.config2.location
+    workspace_resource_id = azurerm_log_analytics_workspace.config2.id
+    interval_in_minutes   = 10
+  }
+
+  tags = {
+    Environment = "Research"
+    Configuration = "Config2-ASG"
+  }
+}
+
+# Data Collection Rule for security events
+resource "azurerm_monitor_data_collection_rule" "security_events" {
+  name                = "dcr-security-events-config2"
+  resource_group_name = azurerm_resource_group.config2.name
+  location            = azurerm_resource_group.config2.location
+
+  destinations {
+    log_analytics {
+      workspace_resource_id = azurerm_log_analytics_workspace.config2.id
+      name                  = "destination-log-analytics"
+    }
+  }
+
+  data_flow {
+    streams      = ["Microsoft-SecurityEvent"]
+    destinations = ["destination-log-analytics"]
+  }
+
+  data_sources {
+    windows_event_log {
+      streams = ["Microsoft-SecurityEvent"]
+      name    = "eventLogsDataSource"
+      x_path_queries = [
+        "Security!*[System[(EventID=4624 or EventID=4625 or EventID=4648 or EventID=4672 or EventID=4720 or EventID=4732 or EventID=4776 or EventID=5140 or EventID=5145)]]"
+      ]
+    }
+  }
+
+  tags = {
+    Environment = "Research"
+    Configuration = "Config2-ASG"
+  }
 }
 
 # Outputs

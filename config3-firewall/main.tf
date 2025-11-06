@@ -1,11 +1,10 @@
-# Configuration 3 - Azure Firewall Enhanced Segmentation
-# NSG + ASG + Azure Firewall (defense in depth)
+# Configuration 3 - Defense-in-depth with Azure Firewall, NSG, and ASG
 
 terraform {
   required_providers {
     azurerm = {
       source  = "hashicorp/azurerm"
-      version = "~> 3.0"
+      version = "~> 4.0"
     }
   }
 }
@@ -16,7 +15,8 @@ provider "azurerm" {
       prevent_deletion_if_contains_resources = false
     }
   }
-  skip_provider_registration = true
+  subscription_id                = "206290e4-7213-49f1-baa4-307c7658e100"
+  resource_provider_registrations = "none"
 }
 
 # Resource Group
@@ -27,7 +27,6 @@ resource "azurerm_resource_group" "config3" {
   tags = {
     Environment = "Research"
     Configuration = "Config3-Firewall"
-    Project = "ZeroTrust-Segmentation"
   }
 }
 
@@ -139,7 +138,20 @@ resource "azurerm_network_security_group" "web" {
     source_address_prefix      = "*"
     destination_address_prefix = "*"
   }
-  
+
+  # Allow RDP from internet (for testing/data collection)
+  security_rule {
+    name                       = "Allow-RDP-Testing"
+    priority                   = 110
+    direction                  = "Inbound"
+    access                     = "Allow"
+    protocol                   = "Tcp"
+    source_port_range          = "*"
+    destination_port_range     = "3389"
+    source_address_prefix      = "*"
+    destination_address_prefix = "*"
+  }
+
   # Allow from firewall subnet
   security_rule {
     name                       = "Allow-From-Firewall"
@@ -202,7 +214,20 @@ resource "azurerm_network_security_group" "app" {
     source_address_prefix      = "10.3.255.0/26"
     destination_address_prefix = "*"
   }
-  
+
+  # Allow RDP from internet (for testing/data collection)
+  security_rule {
+    name                       = "Allow-RDP-Testing"
+    priority                   = 150
+    direction                  = "Inbound"
+    access                     = "Allow"
+    protocol                   = "Tcp"
+    source_port_range          = "*"
+    destination_port_range     = "3389"
+    source_address_prefix      = "*"
+    destination_address_prefix = "*"
+  }
+
   # Deny from internet
   security_rule {
     name                       = "Deny-Internet-Inbound"
@@ -252,7 +277,20 @@ resource "azurerm_network_security_group" "database" {
     source_address_prefix      = "10.3.255.0/26"
     destination_address_prefix = "*"
   }
-  
+
+  # Allow RDP from internet (for testing/data collection)
+  security_rule {
+    name                       = "Allow-RDP-Testing"
+    priority                   = 150
+    direction                  = "Inbound"
+    access                     = "Allow"
+    protocol                   = "Tcp"
+    source_port_range          = "*"
+    destination_port_range     = "3389"
+    source_address_prefix      = "*"
+    destination_address_prefix = "*"
+  }
+
   # Deny all other inbound
   security_rule {
     name                       = "Deny-All-Other-Inbound"
@@ -493,7 +531,26 @@ resource "azurerm_log_analytics_workspace" "config3" {
   resource_group_name = azurerm_resource_group.config3.name
   sku                 = "PerGB2018"
   retention_in_days   = 30
-  
+
+  tags = {
+    Environment = "Research"
+    Configuration = "Config3-Firewall"
+  }
+}
+
+# Azure Sentinel
+resource "azurerm_log_analytics_solution" "sentinel" {
+  solution_name         = "SecurityInsights"
+  location              = azurerm_resource_group.config3.location
+  resource_group_name   = azurerm_resource_group.config3.name
+  workspace_resource_id = azurerm_log_analytics_workspace.config3.id
+  workspace_name        = azurerm_log_analytics_workspace.config3.name
+
+  plan {
+    publisher = "Microsoft"
+    product   = "OMSGallery/SecurityInsights"
+  }
+
   tags = {
     Environment = "Research"
     Configuration = "Config3-Firewall"
@@ -517,8 +574,8 @@ resource "azurerm_monitor_diagnostic_setting" "firewall" {
   enabled_log {
     category = "AzureFirewallDnsProxy"
   }
-  
-  metric {
+
+  enabled_metric {
     category = "AllMetrics"
   }
 }
@@ -530,6 +587,75 @@ resource "azurerm_storage_account" "flowlogs" {
   location                 = azurerm_resource_group.config3.location
   account_tier             = "Standard"
   account_replication_type = "LRS"
+
+  tags = {
+    Environment = "Research"
+    Configuration = "Config3-Firewall"
+  }
+}
+
+# VNet Flow Logs (replacement for deprecated NSG flow logs)
+resource "azurerm_network_watcher_flow_log" "config3_vnet" {
+  name                 = "flowlog-vnet-config3"
+  network_watcher_name = "NetworkWatcher_uksouth"
+  resource_group_name  = "NetworkWatcherRG"
+
+  target_resource_id = azurerm_virtual_network.config3.id
+  storage_account_id = azurerm_storage_account.flowlogs.id
+  enabled            = true
+  version            = 2
+
+  retention_policy {
+    enabled = true
+    days    = 7
+  }
+
+  traffic_analytics {
+    enabled               = true
+    workspace_id          = azurerm_log_analytics_workspace.config3.workspace_id
+    workspace_region      = azurerm_log_analytics_workspace.config3.location
+    workspace_resource_id = azurerm_log_analytics_workspace.config3.id
+    interval_in_minutes   = 10
+  }
+
+  tags = {
+    Environment = "Research"
+    Configuration = "Config3-Firewall"
+  }
+}
+
+# Data Collection Rule for security events
+resource "azurerm_monitor_data_collection_rule" "security_events" {
+  name                = "dcr-security-events-config3"
+  resource_group_name = azurerm_resource_group.config3.name
+  location            = azurerm_resource_group.config3.location
+
+  destinations {
+    log_analytics {
+      workspace_resource_id = azurerm_log_analytics_workspace.config3.id
+      name                  = "destination-log-analytics"
+    }
+  }
+
+  data_flow {
+    streams      = ["Microsoft-SecurityEvent"]
+    destinations = ["destination-log-analytics"]
+  }
+
+  data_sources {
+    windows_event_log {
+      streams = ["Microsoft-SecurityEvent"]
+      name    = "eventLogsDataSource"
+      x_path_queries = [
+        "Security!*[System[(EventID=4624 or EventID=4625 or EventID=4648 or EventID=4672 or EventID=4720 or EventID=4732 or EventID=4776 or EventID=5140 or EventID=5145)]]"
+      ]
+    }
+  }
+
+  tags = {
+    Environment = "Research"
+    Configuration = "Config3-Firewall"
+  }
 }
 
 # Outputs

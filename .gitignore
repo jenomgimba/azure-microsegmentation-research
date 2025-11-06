@@ -27,7 +27,7 @@
 # Test results and data collection
 **/AttackResults/
 **/PerformanceResults/
-**/ResearchData/
+# **/ResearchData/
 **/*.json
 **/azure-monitor-query-*.kql
 **/*-results.json

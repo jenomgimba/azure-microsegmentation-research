@@ -1,5 +1,4 @@
-# Virtual Machines for Configuration 2 with ASG assignments
-# 3 VMs: 1 web, 1 app, 1 database
+# Virtual Machines - Web, Application, and Database servers
 
 variable "admin_username" {
   type    = string
@@ -43,12 +42,18 @@ resource "azurerm_network_interface" "web" {
     subnet_id                     = azurerm_subnet.workloads.id
     private_ip_address_allocation = "Dynamic"
     public_ip_address_id          = azurerm_public_ip.web[count.index].id
-    application_security_group_ids = [azurerm_application_security_group.web.id]
   }
-  
+
   tags = {
     Role = "WebServer"
   }
+}
+
+# Associate Web NIC with Web ASG
+resource "azurerm_network_interface_application_security_group_association" "web" {
+  count                         = 1
+  network_interface_id          = azurerm_network_interface.web[count.index].id
+  application_security_group_id = azurerm_application_security_group.web.id
 }
 
 resource "azurerm_windows_virtual_machine" "web" {
@@ -94,12 +99,18 @@ resource "azurerm_network_interface" "app" {
     subnet_id                     = azurerm_subnet.workloads.id
     private_ip_address_allocation = "Dynamic"
     public_ip_address_id          = azurerm_public_ip.app[count.index].id
-    application_security_group_ids = [azurerm_application_security_group.app.id]
   }
 
   tags = {
     Role = "ApplicationServer"
   }
+}
+
+# Associate App NIC with App ASG
+resource "azurerm_network_interface_application_security_group_association" "app" {
+  count                         = 1
+  network_interface_id          = azurerm_network_interface.app[count.index].id
+  application_security_group_id = azurerm_application_security_group.app.id
 }
 
 resource "azurerm_windows_virtual_machine" "app" {
@@ -144,12 +155,18 @@ resource "azurerm_network_interface" "db" {
     name                          = "internal"
     subnet_id                     = azurerm_subnet.workloads.id
     private_ip_address_allocation = "Dynamic"
-    application_security_group_ids = [azurerm_application_security_group.database.id]
   }
 
   tags = {
     Role = "DatabaseServer"
   }
+}
+
+# Associate DB NIC with Database ASG
+resource "azurerm_network_interface_application_security_group_association" "db" {
+  count                         = 1
+  network_interface_id          = azurerm_network_interface.db[count.index].id
+  application_security_group_id = azurerm_application_security_group.database.id
 }
 
 resource "azurerm_windows_virtual_machine" "db" {
@@ -258,6 +275,28 @@ resource "azurerm_virtual_machine_extension" "config_db" {
   })
 
   depends_on = [azurerm_virtual_machine_extension.monitor_db]
+}
+
+# Data Collection Rule Associations
+resource "azurerm_monitor_data_collection_rule_association" "web" {
+  count                   = 1
+  name                    = "dcra-web-${count.index + 1}"
+  target_resource_id      = azurerm_windows_virtual_machine.web[count.index].id
+  data_collection_rule_id = azurerm_monitor_data_collection_rule.security_events.id
+}
+
+resource "azurerm_monitor_data_collection_rule_association" "app" {
+  count                   = 1
+  name                    = "dcra-app-${count.index + 1}"
+  target_resource_id      = azurerm_windows_virtual_machine.app[count.index].id
+  data_collection_rule_id = azurerm_monitor_data_collection_rule.security_events.id
+}
+
+resource "azurerm_monitor_data_collection_rule_association" "db" {
+  count                   = 1
+  name                    = "dcra-db-${count.index + 1}"
+  target_resource_id      = azurerm_windows_virtual_machine.db[count.index].id
+  data_collection_rule_id = azurerm_monitor_data_collection_rule.security_events.id
 }
 
 # Outputs

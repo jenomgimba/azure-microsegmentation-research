@@ -1,5 +1,4 @@
-# Virtual Machine Module for Baseline Configuration
-# Creates 3 VMs: 1 web, 1 app, 1 database
+# Virtual Machines - Web, Application, and Database servers
 
 # Admin credentials
 variable "admin_username" {
@@ -23,7 +22,7 @@ resource "azurerm_public_ip" "web" {
   sku                 = "Standard"
 }
 
-# Web Server VM (1)
+# Web Server VMs
 resource "azurerm_network_interface" "web" {
   count               = 1
   name                = "nic-web-${count.index + 1}"
@@ -83,7 +82,7 @@ resource "azurerm_public_ip" "app" {
   sku                 = "Standard"
 }
 
-# Application Server VM (1)
+# Application Server VMs
 resource "azurerm_network_interface" "app" {
   count               = 1
   name                = "nic-app-${count.index + 1}"
@@ -134,7 +133,7 @@ resource "azurerm_windows_virtual_machine" "app" {
   }
 }
 
-# Database Server VM (1)
+# Database Server VMs
 resource "azurerm_network_interface" "db" {
   count               = 1
   name                = "nic-db-${count.index + 1}"
@@ -184,7 +183,7 @@ resource "azurerm_windows_virtual_machine" "db" {
   }
 }
 
-# VM Extensions - Azure Monitor Agent
+# Azure Monitor Agent extensions
 resource "azurerm_virtual_machine_extension" "monitor_web" {
   count                      = 1
   name                       = "AzureMonitorWindowsAgent"
@@ -215,7 +214,7 @@ resource "azurerm_virtual_machine_extension" "monitor_db" {
   auto_upgrade_minor_version = true
 }
 
-# VM Configuration Extensions
+# VM configuration extensions
 resource "azurerm_virtual_machine_extension" "config_web" {
   count                = 1
   name                 = "VMConfiguration"
@@ -282,4 +281,26 @@ output "web_public_ip" {
 output "app_public_ip" {
   value = azurerm_public_ip.app[*].ip_address
   description = "Public IP for App VM (RDP access)"
+}
+
+# Data Collection Rule Associations
+resource "azurerm_monitor_data_collection_rule_association" "web" {
+  count                   = 1
+  name                    = "dcra-web-${count.index + 1}"
+  target_resource_id      = azurerm_windows_virtual_machine.web[count.index].id
+  data_collection_rule_id = azurerm_monitor_data_collection_rule.security_events.id
+}
+
+resource "azurerm_monitor_data_collection_rule_association" "app" {
+  count                   = 1
+  name                    = "dcra-app-${count.index + 1}"
+  target_resource_id      = azurerm_windows_virtual_machine.app[count.index].id
+  data_collection_rule_id = azurerm_monitor_data_collection_rule.security_events.id
+}
+
+resource "azurerm_monitor_data_collection_rule_association" "db" {
+  count                   = 1
+  name                    = "dcra-db-${count.index + 1}"
+  target_resource_id      = azurerm_windows_virtual_machine.db[count.index].id
+  data_collection_rule_id = azurerm_monitor_data_collection_rule.security_events.id
 }

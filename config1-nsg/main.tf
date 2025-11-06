@@ -1,13 +1,10 @@
-# Configuration 1 - Network Security Group Subnet-Level Segmentation
-# Part of my MSc research evaluating Azure micro-segmentation
-# Multiple subnets with NSG rules controlling inter-subnet traffic
-# Tests effectiveness of subnet-based network segmentation
+# Configuration 1 - NSG-based subnet segmentation
 
 terraform {
   required_providers {
     azurerm = {
       source  = "hashicorp/azurerm"
-      version = "~> 3.0"
+      version = "~> 4.0"
     }
   }
 }
@@ -18,7 +15,8 @@ provider "azurerm" {
       prevent_deletion_if_contains_resources = false
     }
   }
-  skip_provider_registration = true
+  subscription_id                = "206290e4-7213-49f1-baa4-307c7658e100"
+  resource_provider_registrations = "none"
 }
 
 # Resource Group
@@ -29,7 +27,6 @@ resource "azurerm_resource_group" "config1" {
   tags = {
     Environment = "Research"
     Configuration = "Config1-NSG"
-    Project = "ZeroTrust-Segmentation"
   }
 }
 
@@ -46,7 +43,7 @@ resource "azurerm_virtual_network" "config1" {
   }
 }
 
-# Subnets - Separated by tier
+# Subnets
 resource "azurerm_subnet" "web" {
   name                 = "subnet-web"
   resource_group_name  = azurerm_resource_group.config1.name
@@ -100,7 +97,20 @@ resource "azurerm_network_security_group" "web" {
     source_address_prefix      = "*"
     destination_address_prefix = "*"
   }
-  
+
+  # Allow RDP
+  security_rule {
+    name                       = "Allow-RDP-Testing"
+    priority                   = 110
+    direction                  = "Inbound"
+    access                     = "Allow"
+    protocol                   = "Tcp"
+    source_port_range          = "*"
+    destination_port_range     = "3389"
+    source_address_prefix      = "*"
+    destination_address_prefix = "*"
+  }
+
   # Allow from management subnet
   security_rule {
     name                       = "Allow-Management-Inbound"
@@ -176,7 +186,20 @@ resource "azurerm_network_security_group" "app" {
     source_address_prefix      = "10.1.4.0/24"
     destination_address_prefix = "*"
   }
-  
+
+  # Allow RDP
+  security_rule {
+    name                       = "Allow-RDP-Testing"
+    priority                   = 250
+    direction                  = "Inbound"
+    access                     = "Allow"
+    protocol                   = "Tcp"
+    source_port_range          = "*"
+    destination_port_range     = "3389"
+    source_address_prefix      = "*"
+    destination_address_prefix = "*"
+  }
+
   # Deny from internet
   security_rule {
     name                       = "Deny-Internet-Inbound"
@@ -252,7 +275,20 @@ resource "azurerm_network_security_group" "database" {
     source_address_prefix      = "10.1.4.0/24"
     destination_address_prefix = "*"
   }
-  
+
+  # Allow RDP
+  security_rule {
+    name                       = "Allow-RDP-Testing"
+    priority                   = 250
+    direction                  = "Inbound"
+    access                     = "Allow"
+    protocol                   = "Tcp"
+    source_port_range          = "*"
+    destination_port_range     = "3389"
+    source_address_prefix      = "*"
+    destination_address_prefix = "*"
+  }
+
   # Deny from web tier
   security_rule {
     name                       = "Deny-Web-Tier-Inbound"
@@ -362,20 +398,108 @@ resource "azurerm_log_analytics_workspace" "config1" {
   resource_group_name = azurerm_resource_group.config1.name
   sku                 = "PerGB2018"
   retention_in_days   = 30
-  
+
   tags = {
     Environment = "Research"
     Configuration = "Config1-NSG"
   }
 }
 
-# Network Watcher Flow Logs for all NSGs
+# Azure Sentinel
+resource "azurerm_log_analytics_solution" "sentinel" {
+  solution_name         = "SecurityInsights"
+  location              = azurerm_resource_group.config1.location
+  resource_group_name   = azurerm_resource_group.config1.name
+  workspace_resource_id = azurerm_log_analytics_workspace.config1.id
+  workspace_name        = azurerm_log_analytics_workspace.config1.name
+
+  plan {
+    publisher = "Microsoft"
+    product   = "OMSGallery/SecurityInsights"
+  }
+
+  tags = {
+    Environment = "Research"
+    Configuration = "Config1-NSG"
+  }
+}
+
+# Storage for flow logs
 resource "azurerm_storage_account" "flowlogs" {
   name                     = "stflowlogsconfig1"
   resource_group_name      = azurerm_resource_group.config1.name
   location                 = azurerm_resource_group.config1.location
   account_tier             = "Standard"
   account_replication_type = "LRS"
+
+  tags = {
+    Environment = "Research"
+    Configuration = "Config1-NSG"
+  }
+}
+
+# VNet Flow Logs
+resource "azurerm_network_watcher_flow_log" "config1_vnet" {
+  name                 = "flowlog-vnet-config1"
+  network_watcher_name = "NetworkWatcher_uksouth"
+  resource_group_name  = "NetworkWatcherRG"
+
+  target_resource_id = azurerm_virtual_network.config1.id
+  storage_account_id = azurerm_storage_account.flowlogs.id
+  enabled            = true
+  version            = 2
+
+  retention_policy {
+    enabled = true
+    days    = 7
+  }
+
+  traffic_analytics {
+    enabled               = true
+    workspace_id          = azurerm_log_analytics_workspace.config1.workspace_id
+    workspace_region      = azurerm_log_analytics_workspace.config1.location
+    workspace_resource_id = azurerm_log_analytics_workspace.config1.id
+    interval_in_minutes   = 10
+  }
+
+  tags = {
+    Environment = "Research"
+    Configuration = "Config1-NSG"
+  }
+}
+
+# Data Collection Rule for security events
+resource "azurerm_monitor_data_collection_rule" "security_events" {
+  name                = "dcr-security-events-config1"
+  resource_group_name = azurerm_resource_group.config1.name
+  location            = azurerm_resource_group.config1.location
+
+  destinations {
+    log_analytics {
+      workspace_resource_id = azurerm_log_analytics_workspace.config1.id
+      name                  = "destination-log-analytics"
+    }
+  }
+
+  data_flow {
+    streams      = ["Microsoft-SecurityEvent"]
+    destinations = ["destination-log-analytics"]
+  }
+
+  data_sources {
+    windows_event_log {
+      streams = ["Microsoft-SecurityEvent"]
+      name    = "eventLogsDataSource"
+      x_path_queries = [
+        "Security!*[System[(EventID=4624 or EventID=4625 or EventID=4648 or EventID=4672 or EventID=4720 or EventID=4732 or EventID=4776 or EventID=5140 or EventID=5145)]]"
+      ]
+    }
+  }
+
+  tags = {
+    Environment = "Research"
+    Configuration = "Config1-NSG"
+  }
 }
 
 # Outputs
